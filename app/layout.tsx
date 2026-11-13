@@ -1,4 +1,5 @@
 
+// El layout envuelve todas las rutas y define metadatos y tipografía compartidos.
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";

@@ -1,4 +1,5 @@
 
+// Propiedades visuales que recibe la tarjeta de indicador del panel.
 type TarjetaProps = {
   titulo: string;
   valor: number;

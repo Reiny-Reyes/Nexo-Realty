@@ -1,34 +1,79 @@
 
+// Esta página es un componente de cliente porque carga datos y administra filtros con React.
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { galeriasPropiedades } from "@/lib/imagenes-propiedades";
-import {
-  escucharCambios,
-  obtenerPropiedades,
-  obtenerPropiedadesServidor,
-} from "@/lib/Propiedades";
-
 import type { Propiedad } from "@/types/propiedad";
+import { formatoMoneda } from "@/lib/format";
 
-const formatoPrecio = (precio: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(precio);
+// Convierte un número en un precio legible en dólares estadounidenses.
+const formatoPrecio = (precio: number, moneda: Propiedad["moneda"]) =>
+  formatoMoneda(precio, moneda);
 
 export default function Home() {
-  const propiedades = useSyncExternalStore(
-    escucharCambios,
-    obtenerPropiedades,
-    obtenerPropiedadesServidor
-  );
+  // Estados de la página: datos recibidos, carga, error y filtros elegidos por el visitante.
+  const [propiedades, setPropiedades] = useState<Propiedad[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
 
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("Todas");
+  const [tipo, setTipo] = useState("Todos");
+  const [operacion, setOperacion] = useState("Todas");
+  const [precioMinimo, setPrecioMinimo] = useState("");
+  const [precioMaximo, setPrecioMaximo] = useState("");
+  const [habitacionesMinimas, setHabitacionesMinimas] = useState("");
 
+  // Al montar la página consulta la API, que lee PostgreSQL; activo evita actualizar tras desmontar.
+  useEffect(() => {
+    let activo = true;
+
+    async function cargarPropiedades() {
+      try {
+        setCargando(true);
+        setError("");
+
+        const respuesta = await fetch("/api/propiedades", {
+          cache: "no-store",
+        });
+
+        if (!respuesta.ok) {
+          const resultado: { mensaje?: string } = await respuesta.json();
+          throw new Error(resultado.mensaje || "No se pudieron cargar las propiedades.");
+        }
+
+        const datos: Propiedad[] = await respuesta.json();
+
+        if (activo) {
+          setPropiedades(datos);
+        }
+      } catch (err) {
+        console.error("Error cargando propiedades:", err);
+
+        if (activo) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "No fue posible cargar las propiedades. Intenta nuevamente."
+          );
+        }
+      } finally {
+        if (activo) {
+          setCargando(false);
+        }
+      }
+    }
+
+    cargarPropiedades();
+
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  // La portada oculta los inmuebles vendidos y luego aplica búsqueda y estado.
   const propiedadesPublicas = propiedades.filter(
     (p) => p.estado !== "Vendida"
   );
@@ -42,7 +87,13 @@ export default function Home() {
     const coincideEstado =
       filtro === "Todas" || p.estado === filtro;
 
-    return coincideBusqueda && coincideEstado;
+    const coincideTipo = tipo === "Todos" || (p.tipo ?? "Sin especificar") === tipo;
+    const coincideOperacion = operacion === "Todas" || p.operacion === operacion;
+    const coincidePrecioMinimo = precioMinimo === "" || Number(p.precio) >= Number(precioMinimo);
+    const coincidePrecioMaximo = precioMaximo === "" || Number(p.precio) <= Number(precioMaximo);
+    const coincideHabitaciones = habitacionesMinimas === "" || p.habitaciones >= Number(habitacionesMinimas);
+
+    return coincideBusqueda && coincideEstado && coincideTipo && coincideOperacion && coincidePrecioMinimo && coincidePrecioMaximo && coincideHabitaciones;
   });
 
   return (
@@ -81,16 +132,19 @@ export default function Home() {
               Nosotros
             </a>
 
-            <a  href="https://wa.me/18493180073?text=Hola,%20Nexo%20Realty.%20Me%20gustaría%20recibir%20información%20sobre%20sus%20propiedades." className="transition hover:text-[#777F70]">
+            <a
+              href="https://wa.me/18493180073?text=Hola,%20Nexo%20Realty.%20Me%20gustaría%20recibir%20información%20sobre%20sus%20propiedades."
+              className="transition hover:text-[#777F70]"
+            >
               Contacto
             </a>
           </nav>
 
           <Link
-            href="/dashboard"
+            href="/login"
             className="border border-[#292B27] px-4 py-2.5 text-xs font-medium transition hover:bg-[#292B27] hover:text-white"
           >
-            Administración
+            Iniciar sesión
           </Link>
 
         </div>
@@ -99,7 +153,7 @@ export default function Home() {
       {/* PORTADA */}
       <section
         id="inicio"
-        className="relative mx-4 mt-4 flex min-h-[580px] items-center overflow-hidden bg-cover bg-center md:mx-8 lg:mx-10"
+        className="relative z-0 mx-4 mt-4 flex min-h-[580px] items-center overflow-hidden bg-cover bg-center md:mx-8 lg:mx-10"
         style={{
           backgroundImage:
             "url('https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=2000')",
@@ -200,7 +254,7 @@ export default function Home() {
           </div>
 
           {/* BUSCADOR */}
-          <div className="mb-10 grid gap-3 border border-[#292B27]/10 bg-[#F4F1EB] p-4 md:grid-cols-[1fr_220px_auto]">
+          <div className="mb-10 grid gap-3 border border-[#292B27]/10 bg-[#F4F1EB] p-4 md:grid-cols-2 lg:grid-cols-4">
 
             <input
               type="search"
@@ -220,11 +274,27 @@ export default function Home() {
               <option value="Reservada">Reservada</option>
             </select>
 
+            <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="border border-[#292B27]/10 bg-transparent px-3 py-3 text-sm outline-none">
+              <option value="Todos">Todos los tipos</option>
+              <option>Apartamento</option><option>Casa</option><option>Villa</option><option>Terreno</option><option>Local comercial</option><option>Oficina</option><option>Otro</option><option>Sin especificar</option>
+            </select>
+
+            <select aria-label="Operación" value={operacion} onChange={(e) => setOperacion(e.target.value)} className="border border-[#292B27]/10 bg-transparent px-3 py-3 text-sm outline-none"><option value="Todas">Venta y alquiler</option><option value="Venta">En venta</option><option value="Alquiler">En alquiler</option></select>
+
+            <input type="number" min="0" value={precioMinimo} onChange={(e) => setPrecioMinimo(e.target.value)} placeholder="Precio mínimo (moneda propia)" aria-label="Precio mínimo en la moneda registrada de la propiedad" className="min-w-0 border border-[#292B27]/10 bg-transparent px-3 py-3 text-sm outline-none" />
+            <input type="number" min="0" value={precioMaximo} onChange={(e) => setPrecioMaximo(e.target.value)} placeholder="Precio máximo (moneda propia)" aria-label="Precio máximo en la moneda registrada de la propiedad" className="min-w-0 border border-[#292B27]/10 bg-transparent px-3 py-3 text-sm outline-none" />
+            <input type="number" min="0" step="1" value={habitacionesMinimas} onChange={(e) => setHabitacionesMinimas(e.target.value)} placeholder="Habitaciones mín." aria-label="Habitaciones mínimas" className="min-w-0 border border-[#292B27]/10 bg-transparent px-3 py-3 text-sm outline-none" />
+
             <button
               type="button"
               onClick={() => {
                 setBusqueda("");
                 setFiltro("Todas");
+                setTipo("Todos");
+                setOperacion("Todas");
+                setPrecioMinimo("");
+                setPrecioMaximo("");
+                setHabitacionesMinimas("");
               }}
               className="bg-[#292B27] px-7 py-3 text-sm text-white transition hover:bg-[#777F70]"
             >
@@ -234,16 +304,44 @@ export default function Home() {
           </div>
 
           {/* TARJETAS DE PROPIEDADES */}
-          {propiedadesFiltradas.length > 0 ? (
+          {cargando ? (
+
+            <div className="bg-[#F4F1EB] px-6 py-20 text-center">
+              <p className="text-sm text-[#77786F]">
+                Cargando propiedades...
+              </p>
+            </div>
+
+          ) : error ? (
+
+            <div className="bg-[#F4F1EB] px-6 py-20 text-center">
+              <h3 className="text-xl font-medium">
+                No pudimos cargar las propiedades
+              </h3>
+
+              <p className="mt-3 text-sm text-[#77786F]">
+                {error}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-5 bg-[#292B27] px-6 py-3 text-sm text-white"
+              >
+                Intentar nuevamente
+              </button>
+            </div>
+
+          ) : propiedadesFiltradas.length > 0 ? (
 
             <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
 
-              {propiedadesFiltradas.map((p: Propiedad) => {
+              {propiedadesFiltradas.map((p) => {
 
-               const imagen =
-                p.imagenes?.find((foto) => foto.trim() !== "") ||
-                galeriasPropiedades[p.id]?.[0] ||
-                galeriasPropiedades[1][0];
+                const imagen =
+                  p.imagenes?.find((foto) => foto.trim() !== "") ||
+                  galeriasPropiedades[p.id]?.[0] ||
+                  galeriasPropiedades[1][0];
 
                 return (
                   <Link
@@ -287,24 +385,31 @@ export default function Home() {
                           {p.ubicacion}
                         </p>
 
+                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-[#777F70]">
+                          {p.tipo ?? "Sin especificar"}
+                        </p>
+
                         <h3 className="mt-3 text-xl font-medium">
                           {p.nombre}
                         </h3>
 
+                        <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-[#77786F]">
+                          {p.descripcion || "Consulta los detalles de esta propiedad con nuestro equipo."}
+                        </p>
+
                         <p className="mt-4 text-2xl font-light">
-                          {formatoPrecio(p.precio)}
+                          <span className="mb-2 block text-xs font-semibold uppercase tracking-widest text-[#777F70]">{p.operacion === "Alquiler" ? "Alquiler mensual" : "En venta"}</span>
+                          {formatoPrecio(Number(p.precio), p.moneda)}
                         </p>
 
                         <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#292B27]/10 pt-5 text-xs text-[#77786F]">
 
-                          <span>
-                            {p.habitaciones} habitaciones
-                          </span>
+                          {p.habitaciones > 0 && (
+                            <span>{p.habitaciones} habitaciones</span>
+                          )}
 
-                          {p.banos !== undefined && (
-                            <span>
-                              {p.banos} baños
-                            </span>
+                          {(p.banos ?? 0) > 0 && (
+                            <span>{p.banos} baños</span>
                           )}
 
                           <span>

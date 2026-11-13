@@ -1,4 +1,5 @@
 
+// Almacén local reactivo usado actualmente por la página de detalle; no es la API PostgreSQL.
 import type { Propiedad } from "@/types/propiedad";
 
 export const propiedadesIniciales: Propiedad[] = [
@@ -6,6 +7,8 @@ export const propiedadesIniciales: Propiedad[] = [
     id: 1,
     nombre: "Apartamento Vista al Mar",
     ubicacion: "Santo Domingo, Distrito Nacional",
+    operacion: "Venta",
+    moneda: "USD",
     precio: 185000,
     habitaciones: 3,
     metros: 120,
@@ -15,6 +18,8 @@ export const propiedadesIniciales: Propiedad[] = [
     id: 2,
     nombre: "Villa Residencial",
     ubicacion: "Punta Cana, La Altagracia",
+    operacion: "Venta",
+    moneda: "USD",
     precio: 320000,
     habitaciones: 4,
     metros: 240,
@@ -24,6 +29,8 @@ export const propiedadesIniciales: Propiedad[] = [
     id: 3,
     nombre: "Apartamento Moderno",
     ubicacion: "Santiago de los Caballeros",
+    operacion: "Venta",
+    moneda: "USD",
     precio: 95000,
     habitaciones: 2,
     metros: 85,
@@ -33,6 +40,8 @@ export const propiedadesIniciales: Propiedad[] = [
     id: 4,
     nombre: "Penthouse de Lujo",
     ubicacion: "Santo Domingo, Piantini",
+    operacion: "Venta",
+    moneda: "USD",
     precio: 450000,
     habitaciones: 3,
     metros: 210,

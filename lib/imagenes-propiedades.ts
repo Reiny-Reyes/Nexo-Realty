@@ -1,4 +1,5 @@
 
+// Fotografías de respaldo indexadas por ID cuando un inmueble no tiene imágenes propias.
 export const galeriasPropiedades: Record<number, string[]> = {
   // Apartamento Vista al Mar
   1: [

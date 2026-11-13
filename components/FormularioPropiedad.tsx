@@ -1,12 +1,14 @@
 
+// Formulario cliente reutilizable para crear y editar inmuebles desde el dashboard.
 "use client";
 
 import { useState } from "react";
 import type { ChangeEvent } from "react";
-import type { Estado, Propiedad } from "@/types/propiedad";
+import type { Estado, Moneda, Operacion, Propiedad } from "@/types/propiedad";
 
 
-function comprimirImagen(file: File): Promise<string> {
+// Reduce una foto en el navegador y devuelve un JPEG listo para subir a almacenamiento externo.
+function comprimirImagen(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const imagen = new Image();
@@ -34,10 +36,11 @@ function comprimirImagen(file: File): Promise<string> {
       contexto.fillRect(0, 0, canvas.width, canvas.height);
       contexto.drawImage(imagen, 0, 0, canvas.width, canvas.height);
 
-      const resultado = canvas.toDataURL("image/jpeg", 0.72);
-
       URL.revokeObjectURL(url);
-      resolve(resultado);
+      canvas.toBlob((resultado) => {
+        if (resultado) resolve(resultado);
+        else reject(new Error("No se pudo comprimir la imagen."));
+      }, "image/jpeg", 0.72);
     };
 
     imagen.onerror = () => {
@@ -51,12 +54,13 @@ function comprimirImagen(file: File): Promise<string> {
 
 
 type FormularioPropiedadProps = {
-  onGuardar: (propiedad: Omit<Propiedad, "id">) => void;
+  onGuardar: (propiedad: Omit<Propiedad, "id">) => void | Promise<void>;
   onCerrar: () => void;
   propiedadEditar?: Propiedad;
 };
 
 export default function FormularioPropiedad(props: FormularioPropiedadProps) {
+  // Cambiar la clave remonta el formulario y reinicia sus campos al cambiar de inmueble.
   return (
     <FormularioCampos
       key={props.propiedadEditar?.id ?? "nueva"}
@@ -72,6 +76,11 @@ function FormularioCampos({
 }: FormularioPropiedadProps) {
   const [nombre, setNombre] = useState(propiedadEditar?.nombre ?? "");
   const [ubicacion, setUbicacion] = useState(propiedadEditar?.ubicacion ?? "");
+  const [direccion, setDireccion] = useState(propiedadEditar?.direccion ?? "");
+  const [tipo, setTipo] = useState(propiedadEditar?.tipo ?? "Sin especificar");
+  const [operacion, setOperacion] = useState<Operacion>(propiedadEditar?.operacion ?? "Venta");
+  const [moneda, setMoneda] = useState<Moneda>(propiedadEditar?.moneda ?? "USD");
+  const [amenidades, setAmenidades] = useState(propiedadEditar?.amenidades?.join("\n") ?? "");
   const [precio, setPrecio] = useState(
     propiedadEditar ? String(propiedadEditar.precio) : ""
   );
@@ -89,19 +98,12 @@ function FormularioCampos({
   const [descripcion, setDescripcion] = useState(
     propiedadEditar?.descripcion ?? ""
   );
- const [imagenes, setImagenes] = useState(
-  propiedadEditar?.imagenes
-    ?.filter((foto) => !foto.startsWith("data:image/"))
-    .join("\n") ?? ""
-);
-
-const [fotosSubidas, setFotosSubidas] = useState<string[]>(
-  propiedadEditar?.imagenes?.filter((foto) =>
-    foto.startsWith("data:image/")
-  ) ?? []
-);
-
-const [mensajeFotos, setMensajeFotos] = useState("");
+  const [imagenes, setImagenes] = useState<string[]>(propiedadEditar?.imagenes ?? []);
+  const [urlImagen, setUrlImagen] = useState("");
+  const [fotosNuevas, setFotosNuevas] = useState<string[]>([]);
+  const [mensajeFotos, setMensajeFotos] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState("");
   const [estado, setEstado] = useState<Estado>(
     propiedadEditar?.estado ?? "Disponible"
   );
@@ -110,8 +112,9 @@ const [mensajeFotos, setMensajeFotos] = useState("");
 async function manejarSeleccionFotos(
   e: ChangeEvent<HTMLInputElement>
 ) {
+  // Limita la selección a imágenes y al máximo de cinco fotografías.
   const archivos = Array.from(e.target.files ?? []);
-  const disponibles = 5 - fotosSubidas.length;
+  const disponibles = 5 - imagenes.length;
 
   if (archivos.length === 0) return;
 
@@ -122,8 +125,14 @@ async function manejarSeleccionFotos(
   }
 
   const seleccionados = archivos
-    .filter((archivo) => archivo.type.startsWith("image/"))
+    .filter((archivo) => ["image/jpeg", "image/png", "image/webp"].includes(archivo.type))
     .slice(0, disponibles);
+
+  if (seleccionados.some((archivo) => archivo.size > 25 * 1024 * 1024)) {
+    setMensajeFotos("Selecciona archivos de menos de 25 MB antes de comprimirlos.");
+    e.target.value = "";
+    return;
+  }
 
   if (seleccionados.length === 0) {
     setMensajeFotos("Selecciona archivos de imagen válidos.");
@@ -131,54 +140,157 @@ async function manejarSeleccionFotos(
     return;
   }
 
+  const urlsSubidas: string[] = [];
   try {
     const comprimidas = await Promise.all(
       seleccionados.map((archivo) => comprimirImagen(archivo))
     );
+    for (const blob of comprimidas) {
+      const datos = new FormData();
+      datos.append("imagen", blob, "fotografia.jpg");
+      const respuesta = await fetch("/api/media", { method: "POST", body: datos });
+      const resultado = await respuesta.json();
+      if (!respuesta.ok) throw new Error(resultado.mensaje || "No se pudo subir la fotografía.");
+      urlsSubidas.push(resultado.url as string);
+    }
 
-    setFotosSubidas((anteriores) => [
-      ...anteriores,
-      ...comprimidas,
-    ]);
+    setImagenes((anteriores) => [...anteriores, ...urlsSubidas]);
+    setFotosNuevas((anteriores) => [...anteriores, ...urlsSubidas]);
 
     setMensajeFotos(
-      `${comprimidas.length} fotografía(s) añadida(s).`
+      `${urlsSubidas.length} fotografía(s) cargada(s).`
     );
-  } catch {
-    setMensajeFotos("No se pudieron procesar las fotografías.");
+  } catch (error) {
+    await Promise.all(urlsSubidas.map((url) => fetch("/api/media", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    }).catch(() => undefined)));
+    setMensajeFotos(error instanceof Error ? error.message : "No se pudieron procesar las fotografías.");
   }
 
   e.target.value = "";
 }
 
 function eliminarFoto(index: number) {
-  setFotosSubidas((anteriores) =>
+  const foto = imagenes[index];
+  if (fotosNuevas.includes(foto)) {
+    fetch("/api/media", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: foto }),
+    }).catch(() => {});
+    setFotosNuevas((anteriores) => anteriores.filter((url) => url !== foto));
+  }
+  setImagenes((anteriores) =>
     anteriores.filter((_, i) => i !== index)
   );
 
   setMensajeFotos("Fotografía eliminada.");
 }
 
+async function cancelarFormulario() {
+  await Promise.all(fotosNuevas.map((url) => fetch("/api/media", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  }).catch(() => undefined)));
+  onCerrar();
+}
 
-  function manejarEnvio(e: React.FormEvent<HTMLFormElement>) {
+function moverFoto(index: number, direccion: -1 | 1) {
+  setImagenes((anteriores) => {
+    const destino = index + direccion;
+    if (destino < 0 || destino >= anteriores.length) return anteriores;
+    const nuevas = [...anteriores];
+    [nuevas[index], nuevas[destino]] = [nuevas[destino], nuevas[index]];
+    return nuevas;
+  });
+}
+
+function hacerFotoPrincipal(index: number) {
+  setImagenes((actuales) => {
+    if (index === 0 || index >= actuales.length) return actuales;
+    const nuevas = [...actuales];
+    const [principal] = nuevas.splice(index, 1);
+    nuevas.unshift(principal);
+    return nuevas;
+  });
+  setMensajeFotos("Portada actualizada.");
+}
+
+function agregarEnlaceImagen() {
+  const enlace = urlImagen.trim();
+  try {
+    const url = new URL(enlace);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+  } catch {
+    setMensajeFotos("Introduce una URL http o https válida.");
+    return;
+  }
+  if (imagenes.length >= 5) {
+    setMensajeFotos("Puedes registrar un máximo de 5 fotografías.");
+    return;
+  }
+  if (imagenes.includes(enlace)) {
+    setMensajeFotos("Ese enlace ya está en la galería.");
+    return;
+  }
+  setImagenes((actuales) => [...actuales, enlace]);
+  setUrlImagen("");
+  setMensajeFotos("Fotografía añadida. La primera de la lista será la portada.");
+}
+
+
+  async function manejarEnvio(e: React.FormEvent<HTMLFormElement>) {
+    // Evita la recarga del navegador, normaliza los campos y entrega el objeto al dashboard.
     e.preventDefault();
 
-    const listaImagenes = imagenes
-      .split("\n")
-      .map((imagen) => imagen.trim())
-      .filter((imagen) => imagen.length > 0);
+    if (imagenes.length > 5) {
+      setMensajeFotos("Una propiedad puede tener un máximo de 5 fotografías.");
+      return;
+    }
 
-    onGuardar({
-      nombre: nombre.trim(),
-      ubicacion: ubicacion.trim(),
-      precio: Number(precio),
-      habitaciones: Number(habitaciones),
-      banos: banos.trim() === "" ? undefined : Number(banos),
-      metros: Number(metros),
-      estado,
-      descripcion: descripcion.trim() || undefined,
-      imagenes: [...listaImagenes, ...fotosSubidas],
-    });
+    if (imagenes.some((imagen) => {
+      try {
+        const url = new URL(imagen);
+        return url.protocol !== "https:" && url.protocol !== "http:";
+      } catch {
+        return true;
+      }
+    })) {
+      setMensajeFotos("Cada enlace de imagen debe ser una URL http o https válida.");
+      return;
+    }
+
+    setGuardando(true);
+    setErrorGuardado("");
+    try {
+      await onGuardar({
+        nombre: nombre.trim(),
+        ubicacion: ubicacion.trim(),
+        direccion: direccion.trim() || undefined,
+        tipo,
+        operacion,
+        moneda,
+        precio: Number(precio),
+        habitaciones: Number(habitaciones),
+        banos: banos.trim() === "" ? undefined : Number(banos),
+        metros: Number(metros),
+        estado,
+        descripcion: descripcion.trim() || undefined,
+        amenidades: amenidades.split("\n").map((item) => item.trim()).filter(Boolean),
+        imagenes,
+      });
+    } catch (error) {
+      setErrorGuardado(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron guardar los datos. Inténtalo nuevamente."
+      );
+    } finally {
+      setGuardando(false);
+    }
   }
 
   const estiloInput =
@@ -188,10 +300,11 @@ function eliminarFoto(index: number) {
     "mb-2 block text-sm font-semibold text-slate-700";
 
   return (
-    <form onSubmit={manejarEnvio} className="space-y-6">
+    <form onSubmit={manejarEnvio} className="flex h-[calc(100dvh-1rem)] min-h-0 w-full flex-col overflow-hidden bg-white sm:h-[min(900px,calc(100dvh-3rem))]">
 
-      {/* Encabezado */}
-      <div className="flex items-center gap-4 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-white p-4">
+      {/* Encabezado fijo para mantener el contexto y el cierre accesibles al desplazarse. */}
+      <div className="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-[#e8e6df] bg-white px-5 py-4 sm:px-8">
+        <div className="flex min-w-0 items-center gap-4">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/15">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -210,7 +323,7 @@ function eliminarFoto(index: number) {
         </div>
 
         <div>
-          <h3 className="text-base font-bold text-slate-900">
+          <h3 id="formulario-propiedad-titulo" className="text-lg font-semibold text-slate-900">
             {propiedadEditar ? "Editar propiedad" : "Nueva propiedad"}
           </h3>
           <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -219,7 +332,11 @@ function eliminarFoto(index: number) {
               : "Registra un nuevo inmueble en tu cartera."}
           </p>
         </div>
+        </div>
+        <button type="button" onClick={cancelarFormulario} aria-label="Cerrar formulario" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">×</button>
       </div>
+
+      <div className="min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
 
       {/* Información general */}
       <div className="space-y-4">
@@ -259,17 +376,41 @@ function eliminarFoto(index: number) {
             />
           </div>
 
+          <div>
+            <label className={estiloLabel}>Tipo de inmueble</label>
+            <select value={tipo} onChange={(e) => setTipo(e.target.value)} className={estiloInput}>
+              <option>Sin especificar</option>
+              <option>Apartamento</option>
+              <option>Casa</option>
+              <option>Villa</option>
+              <option>Terreno</option>
+              <option>Local comercial</option>
+              <option>Oficina</option>
+              <option>Otro</option>
+            </select>
+          </div>
+
+          <div>
+            <label className={estiloLabel}>Dirección o referencia</label>
+            <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Sector, calle o referencia" className={estiloInput} />
+          </div>
+
           <div className="sm:col-span-2">
-            <label className={estiloLabel}>
+            <label htmlFor="propiedad-descripcion" className={estiloLabel}>
               Descripción del inmueble
             </label>
             <textarea
+              id="propiedad-descripcion"
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               placeholder="Describe las características, acabados, ventajas y detalles de la propiedad..."
               rows={4}
               className={`${estiloInput} resize-y`}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="propiedad-amenidades" className={estiloLabel}>Amenidades (una por línea)</label>
+            <textarea id="propiedad-amenidades" value={amenidades} onChange={(e) => setAmenidades(e.target.value)} placeholder="Piscina\nSeguridad 24 horas\nEstacionamiento" rows={3} className={`${estiloInput} resize-y`} />
           </div>
         </div>
       </div>
@@ -347,100 +488,48 @@ function eliminarFoto(index: number) {
           </h4>
         </div>
 
-        <div>
-          <label className={estiloLabel}>
-            Enlaces de imágenes
-          </label>
-          <textarea
-            value={imagenes}
-            onChange={(e) => setImagenes(e.target.value)}
-            placeholder={"https://ejemplo.com/foto1.jpg\nhttps://ejemplo.com/foto2.jpg"}
-            rows={4}
-            className={`${estiloInput} resize-y`}
-          />
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            Introduce un enlace por línea. Utiliza direcciones de imágenes
-            accesibles desde internet.
-          </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="url-imagen" className={estiloLabel}>Añadir imagen por enlace</label>
+            <div className="flex gap-2">
+              <input id="url-imagen" type="url" value={urlImagen} onChange={(e) => setUrlImagen(e.target.value)} placeholder="https://ejemplo.com/foto.jpg" className={estiloInput} />
+              <button type="button" onClick={agregarEnlaceImagen} className="shrink-0 rounded-xl bg-[#344536] px-4 text-sm font-medium text-white">Añadir</button>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="subir-imagenes" className={`${estiloLabel} block`}>Subir desde el dispositivo</label>
+            <label htmlFor="subir-imagenes" className="flex min-h-12 cursor-pointer items-center justify-center rounded-xl border border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-900 transition hover:bg-emerald-100">
+              Seleccionar JPG, PNG o WebP
+            </label>
+            <input id="subir-imagenes" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={manejarSeleccionFotos} className="sr-only" />
+          </div>
         </div>
+
+        <p className="text-xs leading-5 text-slate-500">La primera imagen es la portada. Puedes cambiarla o reordenar la galería antes de guardar (máximo 5).</p>
+        {mensajeFotos && <p className="text-sm text-emerald-800" role="status">{mensajeFotos}</p>}
+
+        {imagenes.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {imagenes.map((foto, index) => (
+              <article key={`${foto}-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <div className="relative h-32 bg-slate-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={foto} alt={`Vista previa de fotografía ${index + 1}`} className="h-full w-full object-cover" />
+                  {index === 0 && <span className="absolute left-2 top-2 rounded-full bg-[#344536] px-2.5 py-1 text-[10px] font-semibold text-white">Portada</span>}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 p-2">
+                  {index > 0 && <button type="button" onClick={() => hacerFotoPrincipal(index)} className="rounded-lg border border-[#344536]/20 px-2 py-1.5 text-[10px] text-[#344536]">Usar de portada</button>}
+                  <button type="button" aria-label={`Mover imagen ${index + 1} a la izquierda`} disabled={index === 0} onClick={() => moverFoto(index, -1)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs disabled:opacity-40">←</button>
+                  <button type="button" aria-label={`Mover imagen ${index + 1} a la derecha`} disabled={index === imagenes.length - 1} onClick={() => moverFoto(index, 1)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs disabled:opacity-40">→</button>
+                  <button type="button" onClick={() => eliminarFoto(index)} className="ml-auto rounded-lg border border-red-200 px-2.5 py-1.5 text-[10px] text-red-700">Quitar</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">Aún no hay fotos. La primera que agregues será la portada.</div>
+        )}
       </div>
-
-      
-<div className="space-y-3">
-  <label className={estiloLabel}>
-    Subir fotografías desde tu computadora
-  </label>
-
-  <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 px-5 py-8 text-center transition hover:border-emerald-500 hover:bg-emerald-50">
-    <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        className="h-6 w-6"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M12 16V4m0 0L7 9m5-5 5 5M4 16v4h16v-4"
-        />
-      </svg>
-    </span>
-
-    <span className="text-sm font-semibold text-slate-700">
-      Seleccionar fotografías
-    </span>
-
-    <span className="mt-1 text-xs text-slate-400">
-      JPG, PNG o WebP · Máximo 5 fotografías
-    </span>
-
-    <input
-      type="file"
-      accept="image/*"
-      multiple
-      onChange={manejarSeleccionFotos}
-      className="hidden"
-    />
-  </label>
-
-  {mensajeFotos && (
-    <p className="text-xs text-emerald-700">
-      {mensajeFotos}
-    </p>
-  )}
-
-  {fotosSubidas.length > 0 && (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {fotosSubidas.map((foto, index) => (
-        <div
-          key={index}
-          className="relative overflow-hidden rounded-xl border border-slate-200"
-        >
-          <img
-            src={foto}
-            alt={`Fotografía ${index + 1}`}
-            className="h-32 w-full object-cover"
-          />
-
-          <button
-            type="button"
-            onClick={() => eliminarFoto(index)}
-            className="absolute right-2 top-2 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-red-700"
-          >
-            Eliminar
-          </button>
-        </div>
-      ))}
-    </div>
-  )}
-
-  <p className="text-xs leading-5 text-slate-400">
-    Puedes seleccionar varias fotografías y eliminar las que no quieras utilizar.
-  </p>
-</div>
 
 
       {/* Información comercial */}
@@ -452,16 +541,34 @@ function eliminarFoto(index: number) {
           </h4>
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="propiedad-operacion" className={estiloLabel}>Operación</label>
+            <select id="propiedad-operacion" value={operacion} onChange={(e) => setOperacion(e.target.value as Operacion)} className={`${estiloInput} cursor-pointer`}>
+              <option value="Venta">Venta</option>
+              <option value="Alquiler">Alquiler</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="propiedad-moneda" className={estiloLabel}>Moneda del precio</label>
+            <select id="propiedad-moneda" value={moneda} onChange={(e) => setMoneda(e.target.value as Moneda)} className={`${estiloInput} cursor-pointer`}>
+              <option value="USD">Dólares estadounidenses (USD)</option>
+              <option value="BOB">Bolivianos (BOB)</option>
+            </select>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={estiloLabel}>
-              Precio de venta
+            <label htmlFor="propiedad-precio" className={estiloLabel}>
+              {operacion === "Alquiler" ? "Precio de alquiler" : "Precio de venta"}
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                $
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400" aria-hidden="true">
+                {moneda === "USD" ? "$" : "Bs"}
               </span>
               <input
+                id="propiedad-precio"
                 type="number"
                 min="0"
                 step="any"
@@ -473,7 +580,7 @@ function eliminarFoto(index: number) {
               />
             </div>
             <p className="mt-1.5 text-xs text-slate-400">
-              Precio expresado en dólares (USD).
+              {operacion === "Alquiler" ? "Indica el importe mensual." : "Indica el importe total."} Moneda: {moneda}.
             </p>
           </div>
 
@@ -498,11 +605,16 @@ function eliminarFoto(index: number) {
         </div>
       </div>
 
-      {/* Acciones */}
-      <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+      </div>
+
+      {/* Acciones fijas: siempre visibles aunque el formulario sea más alto que la pantalla. */}
+      <div className="z-10 flex shrink-0 flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <p className="min-h-5 text-sm text-red-700" role="alert">{errorGuardado}</p>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
         <button
           type="button"
-          onClick={onCerrar}
+          onClick={cancelarFormulario}
+          disabled={guardando}
           className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
         >
           Cancelar
@@ -510,7 +622,8 @@ function eliminarFoto(index: number) {
 
         <button
           type="submit"
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-800 active:scale-[0.98]"
+          disabled={guardando}
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#344536] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#263628] disabled:cursor-wait disabled:opacity-60"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -527,8 +640,9 @@ function eliminarFoto(index: number) {
             />
           </svg>
 
-          {propiedadEditar ? "Guardar cambios" : "Registrar propiedad"}
+          {guardando ? "Guardando…" : propiedadEditar ? "Guardar cambios" : "Registrar propiedad"}
         </button>
+        </div>
       </div>
     </form>
   );

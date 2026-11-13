@@ -1,3 +1,4 @@
+/* Carga Tailwind y define tokens globales de color y tipografía de la aplicación. */
 @import "tailwindcss";
 
 :root {

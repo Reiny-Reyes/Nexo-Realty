@@ -1,3 +1,4 @@
+// Opciones de compilación y carga de estilos para la versión de Next.js instalada.
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

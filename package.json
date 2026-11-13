@@ -6,20 +6,27 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "node --env-file=.env.local scripts/migrate-db.mjs",
+    "db:seed-demo": "node --env-file=.env.local scripts/seed-propiedades-demo.mjs",
+    "users:bootstrap": "node --env-file=.env.local scripts/bootstrap-users.mjs"
   },
   "dependencies": {
+    "@prisma/client": "^7.10.1",
     "next": "16.4.3",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "prisma": "^7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

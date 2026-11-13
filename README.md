@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Base de datos y accesos
+
+Para restaurar la base PostgreSQL, aplicar los cambios de esquema y crear las cuentas iniciales, sigue [CONFIGURAR_ACCESO.md](CONFIGURAR_ACCESO.md). La guía general del proyecto está en [GUIA_DEL_CODIGO.md](GUIA_DEL_CODIGO.md).
+
 ## Getting Started
 
 First, run the development server:
