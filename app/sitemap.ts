@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
-import { cacheLife, cacheTag } from "next/cache";
+import { connection } from "next/server";
 import { pool } from "@/lib/db";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  "use cache";
-  cacheLife("hours");
-  cacheTag("sitemap-propiedades");
+  // La base de datos se consulta al atender /sitemap.xml, no durante el build.
+  await connection();
+
   const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const urls: MetadataRoute.Sitemap = [{ url: base, changeFrequency: "daily", priority: 1 }];
   try {

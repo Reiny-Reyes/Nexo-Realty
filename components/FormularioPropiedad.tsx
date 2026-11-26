@@ -102,6 +102,7 @@ function FormularioCampos({
   const [urlImagen, setUrlImagen] = useState("");
   const [fotosNuevas, setFotosNuevas] = useState<string[]>([]);
   const [mensajeFotos, setMensajeFotos] = useState("");
+  const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [errorGuardado, setErrorGuardado] = useState("");
   const [estado, setEstado] = useState<Estado>(
@@ -141,6 +142,8 @@ async function manejarSeleccionFotos(
   }
 
   const urlsSubidas: string[] = [];
+  setSubiendoFotos(true);
+  setMensajeFotos(`Procesando ${seleccionados.length} fotografía(s)…`);
   try {
     const comprimidas = await Promise.all(
       seleccionados.map((archivo) => comprimirImagen(archivo))
@@ -148,9 +151,18 @@ async function manejarSeleccionFotos(
     for (const blob of comprimidas) {
       const datos = new FormData();
       datos.append("imagen", blob, "fotografia.jpg");
-      const respuesta = await fetch("/api/media", { method: "POST", body: datos });
-      const resultado = await respuesta.json();
-      if (!respuesta.ok) throw new Error(resultado.mensaje || "No se pudo subir la fotografía.");
+      const respuesta = await fetch("/api/media", {
+        method: "POST",
+        body: datos,
+        signal: AbortSignal.timeout(60_000),
+      });
+      const resultado = await respuesta.json().catch(() => null);
+      if (!respuesta.ok) {
+        throw new Error(resultado?.mensaje || "No se pudo subir la fotografía.");
+      }
+      if (typeof resultado?.url !== "string") {
+        throw new Error("El servidor no devolvió la dirección de la fotografía.");
+      }
       urlsSubidas.push(resultado.url as string);
     }
 
@@ -166,30 +178,33 @@ async function manejarSeleccionFotos(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
     }).catch(() => undefined)));
-    setMensajeFotos(error instanceof Error ? error.message : "No se pudieron procesar las fotografías.");
+    setMensajeFotos(
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? "La carga tardó demasiado. Comprueba tu conexión e inténtalo de nuevo."
+        : error instanceof Error
+          ? error.message
+          : "No se pudieron procesar las fotografías."
+    );
+  } finally {
+    setSubiendoFotos(false);
+    e.target.value = "";
   }
-
-  e.target.value = "";
 }
 
 function eliminarFoto(index: number) {
-  const foto = imagenes[index];
-  if (fotosNuevas.includes(foto)) {
-    fetch("/api/media", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: foto }),
-    }).catch(() => {});
-    setFotosNuevas((anteriores) => anteriores.filter((url) => url !== foto));
-  }
   setImagenes((anteriores) =>
     anteriores.filter((_, i) => i !== index)
   );
 
-  setMensajeFotos("Fotografía eliminada.");
+  setMensajeFotos(
+    propiedadEditar
+      ? "Fotografía marcada para quitarse al guardar los cambios."
+      : "Fotografía quitada del formulario."
+  );
 }
 
 async function cancelarFormulario() {
+  if (subiendoFotos || guardando) return;
   await Promise.all(fotosNuevas.map((url) => fetch("/api/media", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
@@ -263,6 +278,18 @@ function agregarEnlaceImagen() {
       return;
     }
 
+    if (propiedadEditar) {
+      const imagenesQuitadas = (propiedadEditar.imagenes ?? []).some(
+        (imagen) => !imagenes.includes(imagen)
+      );
+      const detalleImagenes = imagenesQuitadas
+        ? " Las fotografías marcadas se quitarán de la propiedad."
+        : "";
+      if (!window.confirm(`¿Deseas guardar los cambios de «${propiedadEditar.nombre}»?${detalleImagenes}`)) {
+        return;
+      }
+    }
+
     setGuardando(true);
     setErrorGuardado("");
     try {
@@ -282,6 +309,15 @@ function agregarEnlaceImagen() {
         amenidades: amenidades.split("\n").map((item) => item.trim()).filter(Boolean),
         imagenes,
       });
+
+      const fotosNuevasQuitadas = fotosNuevas.filter(
+        (url) => !imagenes.includes(url)
+      );
+      await Promise.all(fotosNuevasQuitadas.map((url) => fetch("/api/media", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      }).catch(() => undefined)));
     } catch (error) {
       setErrorGuardado(
         error instanceof Error
@@ -333,7 +369,7 @@ function agregarEnlaceImagen() {
           </p>
         </div>
         </div>
-        <button type="button" onClick={cancelarFormulario} aria-label="Cerrar formulario" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">×</button>
+        <button type="button" onClick={cancelarFormulario} disabled={subiendoFotos || guardando} aria-label="Cerrar formulario" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40">×</button>
       </div>
 
       <div className="min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
@@ -499,9 +535,9 @@ function agregarEnlaceImagen() {
           <div>
             <label htmlFor="subir-imagenes" className={`${estiloLabel} block`}>Subir desde el dispositivo</label>
             <label htmlFor="subir-imagenes" className="flex min-h-12 cursor-pointer items-center justify-center rounded-xl border border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-900 transition hover:bg-emerald-100">
-              Seleccionar JPG, PNG o WebP
+              {subiendoFotos ? "Subiendo fotografías…" : "Seleccionar JPG, PNG o WebP"}
             </label>
-            <input id="subir-imagenes" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={manejarSeleccionFotos} className="sr-only" />
+            <input id="subir-imagenes" type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={subiendoFotos || guardando} onChange={manejarSeleccionFotos} className="sr-only" />
           </div>
         </div>
 
@@ -521,7 +557,7 @@ function agregarEnlaceImagen() {
                   {index > 0 && <button type="button" onClick={() => hacerFotoPrincipal(index)} className="rounded-lg border border-[#344536]/20 px-2 py-1.5 text-[10px] text-[#344536]">Usar de portada</button>}
                   <button type="button" aria-label={`Mover imagen ${index + 1} a la izquierda`} disabled={index === 0} onClick={() => moverFoto(index, -1)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs disabled:opacity-40">←</button>
                   <button type="button" aria-label={`Mover imagen ${index + 1} a la derecha`} disabled={index === imagenes.length - 1} onClick={() => moverFoto(index, 1)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs disabled:opacity-40">→</button>
-                  <button type="button" onClick={() => eliminarFoto(index)} className="ml-auto rounded-lg border border-red-200 px-2.5 py-1.5 text-[10px] text-red-700">Quitar</button>
+                  <button type="button" disabled={subiendoFotos || guardando} onClick={() => eliminarFoto(index)} className="ml-auto rounded-lg border border-red-200 px-2.5 py-1.5 text-[10px] text-red-700 disabled:cursor-not-allowed disabled:opacity-40">Quitar</button>
                 </div>
               </article>
             ))}
@@ -614,7 +650,7 @@ function agregarEnlaceImagen() {
         <button
           type="button"
           onClick={cancelarFormulario}
-          disabled={guardando}
+          disabled={guardando || subiendoFotos}
           className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
         >
           Cancelar
@@ -622,7 +658,7 @@ function agregarEnlaceImagen() {
 
         <button
           type="submit"
-          disabled={guardando}
+          disabled={guardando || subiendoFotos}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#344536] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#263628] disabled:cursor-wait disabled:opacity-60"
         >
           <svg

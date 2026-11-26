@@ -12,6 +12,8 @@
     "users:bootstrap": "node --env-file=.env.local scripts/bootstrap-users.mjs"
   },
   "dependencies": {
+    "@neon/config": "^1.14.2",
+    "@neon/env": "^2.1.5",
     "@prisma/client": "^7.10.1",
     "next": "16.4.3",
     "pg": "^8.23.1",

@@ -142,6 +142,8 @@ export default function Home() {
 
           <Link
             href="/login"
+            target="_blank"
+            rel="noopener noreferrer"
             className="border border-[#292B27] px-4 py-2.5 text-xs font-medium transition hover:bg-[#292B27] hover:text-white"
           >
             Iniciar sesión
@@ -536,6 +538,8 @@ export default function Home() {
 
           <Link
             href="/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-xs text-white/70 transition hover:text-white"
           >
             Acceso administrativo
