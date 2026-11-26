@@ -2,7 +2,7 @@
 // Formulario cliente reutilizable para crear y editar inmuebles desde el dashboard.
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import type { Estado, Moneda, Operacion, Propiedad } from "@/types/propiedad";
 
@@ -74,6 +74,10 @@ function FormularioCampos({
   onCerrar,
   propiedadEditar,
 }: FormularioPropiedadProps) {
+  const campoFotosRef = useRef<HTMLInputElement>(null);
+  const botonFotosRef = useRef<HTMLButtonElement>(null);
+  const contenidoFormularioRef = useRef<HTMLDivElement>(null);
+  const scrollAntesDeElegirFotos = useRef(0);
   const [nombre, setNombre] = useState(propiedadEditar?.nombre ?? "");
   const [ubicacion, setUbicacion] = useState(propiedadEditar?.ubicacion ?? "");
   const [direccion, setDireccion] = useState(propiedadEditar?.direccion ?? "");
@@ -188,6 +192,10 @@ async function manejarSeleccionFotos(
   } finally {
     setSubiendoFotos(false);
     e.target.value = "";
+    if (contenidoFormularioRef.current) {
+      contenidoFormularioRef.current.scrollTop = scrollAntesDeElegirFotos.current;
+    }
+    requestAnimationFrame(() => botonFotosRef.current?.focus({ preventScroll: true }));
   }
 }
 
@@ -372,7 +380,7 @@ function agregarEnlaceImagen() {
         <button type="button" onClick={cancelarFormulario} disabled={subiendoFotos || guardando} aria-label="Cerrar formulario" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40">×</button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
+      <div ref={contenidoFormularioRef} className="min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
 
       {/* Información general */}
       <div className="space-y-4">
@@ -533,16 +541,26 @@ function agregarEnlaceImagen() {
             </div>
           </div>
           <div>
-            <label htmlFor="subir-imagenes" className={`${estiloLabel} block`}>Subir desde el dispositivo</label>
-            <label htmlFor="subir-imagenes" className="flex min-h-12 cursor-pointer items-center justify-center rounded-xl border border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-900 transition hover:bg-emerald-100">
+            <label className={`${estiloLabel} block`}>Subir desde el dispositivo</label>
+            <button
+              ref={botonFotosRef}
+              type="button"
+              disabled={subiendoFotos || guardando}
+              onClick={() => {
+                scrollAntesDeElegirFotos.current = contenidoFormularioRef.current?.scrollTop ?? 0;
+                campoFotosRef.current?.click();
+              }}
+              aria-describedby="mensaje-fotos"
+              className="flex min-h-12 w-full cursor-pointer items-center justify-center rounded-xl border border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-900 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
+            >
               {subiendoFotos ? "Subiendo fotografías…" : "Seleccionar JPG, PNG o WebP"}
-            </label>
-            <input id="subir-imagenes" type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={subiendoFotos || guardando} onChange={manejarSeleccionFotos} className="sr-only" />
+            </button>
+            <input ref={campoFotosRef} type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={subiendoFotos || guardando} onChange={manejarSeleccionFotos} className="hidden" />
           </div>
         </div>
 
         <p className="text-xs leading-5 text-slate-500">La primera imagen es la portada. Puedes cambiarla o reordenar la galería antes de guardar (máximo 5).</p>
-        {mensajeFotos && <p className="text-sm text-emerald-800" role="status">{mensajeFotos}</p>}
+        {mensajeFotos && <p id="mensaje-fotos" className="text-sm text-emerald-800" role="status">{mensajeFotos}</p>}
 
         {imagenes.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -589,7 +607,7 @@ function agregarEnlaceImagen() {
             <label htmlFor="propiedad-moneda" className={estiloLabel}>Moneda del precio</label>
             <select id="propiedad-moneda" value={moneda} onChange={(e) => setMoneda(e.target.value as Moneda)} className={`${estiloInput} cursor-pointer`}>
               <option value="USD">Dólares estadounidenses (USD)</option>
-              <option value="BOB">Bolivianos (BOB)</option>
+              <option value="BOB">Pesos dominicanos (RD$)</option>
             </select>
           </div>
         </div>
@@ -601,7 +619,7 @@ function agregarEnlaceImagen() {
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400" aria-hidden="true">
-                {moneda === "USD" ? "$" : "Bs"}
+                {moneda === "USD" ? "$" : "RD$"}
               </span>
               <input
                 id="propiedad-precio"

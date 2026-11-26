@@ -56,7 +56,7 @@ El dominio remitente debe estar verificado en Resend. Sin esas variables, la opc
 
 Las consultas enviadas desde una ficha se guardan en PostgreSQL y abren WhatsApp para completar el contacto. Los usuarios del panel pueden verlas; solo administradores pueden cambiar su estado. El panel también muestra visitas, conversión aproximada, inmuebles populares e historial de cambios. Las visitas se cuentan una vez por navegador y propiedad al día.
 
-En el editor de propiedad se pueden añadir hasta cinco imágenes por archivo o URL, previsualizarlas, cambiar el orden y elegir la portada. También se puede seleccionar venta/alquiler y USD/BOB. El resumen de portafolio conserva totales separados por moneda.
+En el editor de propiedad se pueden añadir hasta cinco imágenes por archivo o URL, previsualizarlas, cambiar el orden y elegir la portada. También se puede seleccionar venta/alquiler y USD/RD$. El resumen de portafolio conserva totales separados por moneda.
 
 El sitio expone `/sitemap.xml` y `/robots.txt`; configura `NEXT_PUBLIC_SITE_URL` con el dominio público para que los enlaces canónicos y SEO apunten al dominio de producción.
 

@@ -1,42 +1,71 @@
 "use client";
 
 import type { Moneda, Propiedad } from "@/types/propiedad";
-import { formatoMoneda } from "@/lib/format";
+import { etiquetaMoneda, formatoMoneda } from "@/lib/format";
 import { galeriasPropiedades } from "@/lib/imagenes-propiedades";
 
 const estados = [
-  { nombre: "Disponible", color: "#5b8f6a", sombra: "#376b49" },
-  { nombre: "Reservada", color: "#daa94f", sombra: "#a77927" },
-  { nombre: "Vendida", color: "#c9755e", sombra: "#984c38" },
+  { nombre: "Disponible", color: "#4f7f5e" },
+  { nombre: "Reservada", color: "#d4a548" },
+  { nombre: "Vendida", color: "#bd7058" },
 ] as const;
 
-export function GraficoEstados3D({ propiedades }: { propiedades: Propiedad[] }) {
+export function GraficoEstadosInventario({ propiedades }: { propiedades: Propiedad[] }) {
+  const total = propiedades.length;
+  const radio = 68;
+  const circunferencia = 2 * Math.PI * radio;
+  let desplazamiento = 0;
+  const datos = estados.map((estado) => {
+    const cantidad = propiedades.filter((p) => p.estado === estado.nombre).length;
+    const proporción = total ? (cantidad / total) * 100 : 0;
+    const longitud = total ? (cantidad / total) * circunferencia : 0;
+    const segmento = { ...estado, cantidad, proporción, longitud, desplazamiento };
+    desplazamiento += longitud;
+    return segmento;
+  });
+
   return (
-    <div className="space-y-5" aria-label="Distribución de propiedades por estado">
-      {estados.map((estado) => {
-        const cantidad = propiedades.filter((p) => p.estado === estado.nombre).length;
-        const proporción = propiedades.length ? cantidad / propiedades.length * 100 : 0;
-        return (
-          <div key={estado.nombre} className="grid grid-cols-[90px_minmax(0,1fr)_42px] items-center gap-3">
-            <span className="text-xs font-medium text-slate-600">{estado.nombre}</span>
-            <div className="h-[48px] border-b border-r border-slate-200 bg-[linear-gradient(135deg,#f8fafc_25%,transparent_25%,transparent_50%,#f8fafc_50%,#f8fafc_75%,transparent_75%)] bg-[length:12px_12px] px-1 pt-1">
-              <div
-                className="relative h-full min-w-[8px] transition-all duration-500"
-                style={{
-                  width: `${Math.max(proporción, cantidad ? 7 : 0)}%`,
-                  backgroundColor: estado.color,
-                  transform: "skewY(-8deg)",
-                  transformOrigin: "left bottom",
-                  boxShadow: `5px 5px 0 ${estado.sombra}, 9px 9px 0 ${estado.sombra}55`,
-                }}
-              >
-                {cantidad > 0 && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{cantidad}</span>}
-              </div>
+    <div className="grid items-center gap-6 sm:grid-cols-[minmax(180px,220px)_1fr]" role="group" aria-label={`Distribución de ${total} propiedades por estado`}>
+      <svg viewBox="0 0 200 200" className="mx-auto w-full max-w-[210px]" aria-hidden="true">
+        <circle cx="100" cy="100" r={radio} fill="none" stroke="#edf0ed" strokeWidth="20" />
+        {datos.filter((segmento) => segmento.cantidad > 0).map((segmento) => (
+          <circle
+            key={segmento.nombre}
+            cx="100"
+            cy="100"
+            r={radio}
+            fill="none"
+            stroke={segmento.color}
+            strokeWidth="20"
+            strokeDasharray={`${segmento.longitud} ${circunferencia - segmento.longitud}`}
+            strokeDashoffset={-segmento.desplazamiento}
+            transform="rotate(-90 100 100)"
+            className="transition-all duration-700"
+          />
+        ))}
+        <text x="100" y="91" textAnchor="middle" fill="#647067" fontSize="10" fontWeight="600" letterSpacing="1.5">PROPIEDADES</text>
+        <text x="100" y="119" textAnchor="middle" fill="#17231b" fontSize="30" fontWeight="700">{total}</text>
+      </svg>
+
+      <ul className="space-y-3">
+        {datos.map((segmento) => (
+          <li key={segmento.nombre} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <div className="flex items-center justify-between gap-4">
+              <span className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segmento.color }} />
+                {segmento.nombre}
+              </span>
+              <strong className="text-sm font-semibold text-slate-900">{segmento.cantidad}</strong>
             </div>
-            <span className="text-right text-xs font-bold text-slate-700">{cantidad}<span className="ml-1 text-[9px] font-normal text-slate-400">{Math.round(proporción)}%</span></span>
-          </div>
-        );
-      })}
+            <div className="mt-2.5 flex items-center gap-3">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${segmento.proporción}%`, backgroundColor: segmento.color }} />
+              </div>
+              <span className="w-9 text-right text-[11px] tabular-nums text-slate-500">{Math.round(segmento.proporción)}%</span>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -51,13 +80,13 @@ export function GraficoPrismasPrecios({ propiedades, moneda }: { propiedades: Pr
   const guias = [0, 1, 2, 3];
 
   if (!datos.length) {
-    return <div className="flex min-h-[280px] items-center justify-center rounded-2xl bg-[#f8f6f3] px-5 text-center text-sm text-slate-500">No hay propiedades registradas en {moneda}.</div>;
+    return <div className="flex min-h-[280px] items-center justify-center rounded-2xl bg-[#f8f6f3] px-5 text-center text-sm text-slate-500">No hay propiedades registradas en {etiquetaMoneda(moneda)}.</div>;
   }
 
   return (
     <div>
       <div className="rounded-2xl border border-[#eee9e4] bg-gradient-to-b from-[#fbfaf8] to-[#f0ede9] p-3 sm:p-4">
-        <svg viewBox="0 0 440 240" className="h-[260px] w-full" role="img" aria-label={`Gráfico tridimensional de las cinco propiedades de mayor precio en ${moneda}`}>
+        <svg viewBox="0 0 440 240" className="h-[260px] w-full" role="img" aria-label={`Gráfico de las cinco propiedades de mayor precio en ${etiquetaMoneda(moneda)}`}>
           {guias.map((guia) => {
             const y = 190 - guia * 52;
             const valor = maximo * guia / 3;

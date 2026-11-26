@@ -1,10 +1,15 @@
 import type { Moneda } from "@/types/propiedad";
 
+export function etiquetaMoneda(moneda: Moneda) {
+  return moneda === "BOB" ? "RD$" : "USD";
+}
+
 export function formatoMoneda(valor: number, moneda: Moneda = "USD") {
-  const locale = moneda === "BOB" ? "es-BO" : "en-US";
+  const esPesosDominicanos = moneda === "BOB";
+  const locale = esPesosDominicanos ? "es-DO" : "en-US";
   return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: moneda,
+    currency: esPesosDominicanos ? "DOP" : "USD",
     maximumFractionDigits: 0,
   }).format(valor);
 }

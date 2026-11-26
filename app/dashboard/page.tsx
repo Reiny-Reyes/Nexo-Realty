@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import FormularioPropiedad from "@/components/FormularioPropiedad";
 import AdministrarUsuarios from "@/components/AdministrarUsuarios";
 import CambiarContrasena from "@/components/CambiarContrasena";
-import { FotoInventario, GraficoEstados3D, GraficoPrismasPrecios } from "@/components/dashboard/Visualizaciones3D";
+import { FotoInventario, GraficoEstadosInventario, GraficoPrismasPrecios } from "@/components/dashboard/Visualizaciones3D";
 import type { Propiedad } from "@/types/propiedad";
 import { formatoMoneda } from "@/lib/format";
 
@@ -189,7 +189,7 @@ export default function DashboardPage() {
     (suma, p) => suma + (p.moneda === "USD" ? Number(p.precio) : 0),
     0
   );
-  const valorTotalBOB = propiedades.reduce((suma, p) => suma + (p.moneda === "BOB" ? Number(p.precio) : 0), 0);
+  const valorTotalRD = propiedades.reduce((suma, p) => suma + (p.moneda === "BOB" ? Number(p.precio) : 0), 0);
 
   // useMemo vuelve a filtrar solo cuando cambia la lista o alguno de los filtros.
   const propiedadesFiltradas = useMemo(() => {
@@ -563,8 +563,8 @@ export default function DashboardPage() {
                     <p className="mt-1 text-[10px] text-white/55">{propiedades.filter((p) => p.moneda === "USD").length} propiedades</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[.08] p-4 backdrop-blur-sm">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-white/55">Total en BOB</p>
-                    <p className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">{dinero(valorTotalBOB, "BOB")}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-white/55">Total en RD$</p>
+                    <p className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">{dinero(valorTotalRD, "BOB")}</p>
                     <p className="mt-1 text-[10px] text-white/55">{propiedades.filter((p) => p.moneda === "BOB").length} propiedades</p>
                   </div>
                 </div>
@@ -581,7 +581,7 @@ export default function DashboardPage() {
                   <div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#8a634f]">Composición</p><h3 className="mt-1 text-lg font-semibold text-slate-900">Estado del inventario</h3><p className="mt-1 text-xs text-slate-500">Distribución actual de las propiedades</p></div>
                   <span className="rounded-xl bg-[#f4f1ed] px-3 py-2 text-xs font-semibold text-[#8a634f]">{total} en total</span>
                 </div>
-                <GraficoEstados3D propiedades={propiedades} />
+                <GraficoEstadosInventario propiedades={propiedades} />
               </article>
             </section>
 
@@ -594,7 +594,7 @@ export default function DashboardPage() {
                 <div className="max-h-96 divide-y divide-[#292B27]/10 overflow-auto">
                   {consultas.length === 0 ? <p className="p-6 text-sm text-[#77786F]">Todavía no hay consultas registradas.</p> : consultas.slice(0, 40).map((consulta) => (
                     <article key={consulta.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
-                      <div className="min-w-0 flex-1"><p className="font-medium">{consulta.nombre} <span className="font-normal text-[#77786F]">· {consulta.propiedad_nombre}</span></p><p className="mt-1 text-xs text-[#77786F]">{consulta.telefono}{consulta.email ? ` · ${consulta.email}` : ""} · {new Date(consulta.created_at).toLocaleString("es-BO")}</p>{consulta.mensaje && <p className="mt-2 line-clamp-2 text-xs text-[#77786F]">{consulta.mensaje}</p>}</div>
+                      <div className="min-w-0 flex-1"><p className="font-medium">{consulta.nombre} <span className="font-normal text-[#77786F]">· {consulta.propiedad_nombre}</span></p><p className="mt-1 text-xs text-[#77786F]">{consulta.telefono}{consulta.email ? ` · ${consulta.email}` : ""} · {new Date(consulta.created_at).toLocaleString("es-DO")}</p>{consulta.mensaje && <p className="mt-2 line-clamp-2 text-xs text-[#77786F]">{consulta.mensaje}</p>}</div>
                       {esAdministrador ? <select aria-label={`Estado de consulta de ${consulta.nombre}`} value={consulta.estado} onChange={(e) => cambiarEstadoConsulta(consulta.id, e.target.value)} className="border border-[#292B27]/15 bg-white px-2 py-2 text-xs"><option>Nueva</option><option>En seguimiento</option><option>Cerrada</option></select> : <span className="text-xs text-[#77786F]">{consulta.estado}</span>}
                     </article>
                   ))}
@@ -605,7 +605,7 @@ export default function DashboardPage() {
                 <p className="mt-5 border-t border-[#292B27]/10 pt-4 text-xs font-semibold">Más visitadas · 30 días</p>
                 <ol className="mt-3 space-y-2">{masVistas.length ? masVistas.map((item) => <li key={item.id} className="flex justify-between gap-3 text-xs"><span className="truncate">{item.nombre}</span><strong>{item.vistas}</strong></li>) : <li className="text-xs text-[#77786F]">Aún no hay visitas.</li>}</ol>
                 <p className="mt-5 border-t border-[#292B27]/10 pt-4 text-xs font-semibold">Actividad reciente</p>
-                <ol className="mt-3 max-h-64 space-y-3 overflow-auto">{historial.length === 0 ? <li className="text-sm text-[#77786F]">Sin cambios registrados.</li> : historial.slice(0, 20).map((evento) => <li key={evento.id} className="border-l-2 border-[#777F70]/40 pl-3"><p className="text-sm"><strong>{evento.accion}</strong> · {evento.propiedad_nombre}</p><p className="mt-1 text-[10px] text-[#77786F]">{evento.username} · {new Date(evento.created_at).toLocaleString("es-BO")}</p></li>)}</ol>
+                <ol className="mt-3 max-h-64 space-y-3 overflow-auto">{historial.length === 0 ? <li className="text-sm text-[#77786F]">Sin cambios registrados.</li> : historial.slice(0, 20).map((evento) => <li key={evento.id} className="border-l-2 border-[#777F70]/40 pl-3"><p className="text-sm"><strong>{evento.accion}</strong> · {evento.propiedad_nombre}</p><p className="mt-1 text-[10px] text-[#77786F]">{evento.username} · {new Date(evento.created_at).toLocaleString("es-DO")}</p></li>)}</ol>
               </div>
             </section>
 
@@ -714,10 +714,10 @@ export default function DashboardPage() {
               <div id="estadisticas" className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_16px_45px_-35px_rgba(15,23,42,.35)] md:p-6">
                 <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                   <div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#8a634f]">Comparación visual</p><h3 className="mt-1 text-lg font-semibold text-slate-900">Precios de propiedades</h3><p className="mt-1 text-xs text-slate-500">Cinco valores más altos · cada barra muestra una propiedad</p></div>
-                  <label className="flex items-center gap-2 text-[10px] font-medium text-slate-500">Moneda<select aria-label="Moneda del gráfico de precios" value={monedaGrafico} onChange={(e) => setMonedaGrafico(e.target.value as Propiedad["moneda"])} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-800"><option value="USD">USD</option><option value="BOB">BOB</option></select></label>
+                  <label className="flex items-center gap-2 text-[10px] font-medium text-slate-500">Moneda<select aria-label="Moneda del gráfico de precios" value={monedaGrafico} onChange={(e) => setMonedaGrafico(e.target.value as Propiedad["moneda"])} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-800"><option value="USD">USD</option><option value="BOB">RD$</option></select></label>
                 </div>
                 <GraficoPrismasPrecios propiedades={propiedades} moneda={monedaGrafico} />
-                <p className="mt-4 rounded-xl bg-[#f8f6f3] px-3 py-2.5 text-[10px] leading-5 text-slate-500">La escala y el listado usan únicamente la moneda seleccionada; cambia a BOB para comparar las propiedades en bolivianos.</p>
+                <p className="mt-4 rounded-xl bg-[#f8f6f3] px-3 py-2.5 text-[10px] leading-5 text-slate-500">La escala y el listado usan únicamente la moneda seleccionada; cambia a RD$ para comparar las propiedades en pesos dominicanos.</p>
               </div>
             </section>
 
